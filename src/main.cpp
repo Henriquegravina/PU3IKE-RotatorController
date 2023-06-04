@@ -42,12 +42,12 @@ float heading =0 ;
 int analog_in =0 ;
 
 unsigned long lastTime;
-unsigned long isTime = 100000;
-unsigned long itTimeHigh = 700000;
-unsigned long itTimeLow  = 50000;
+unsigned long isTime = 1000000;
+unsigned long itTimeHigh = 1000000;
+unsigned long itTimeLow  = 100000;
 
-float max_az_angle = 360.0;
-float min_az_angle = -40.0;
+float max_az_angle = 210.0;
+float min_az_angle = -150.0;
 int max_az_analog = 1024;
 int min_az_analog = 0;
 
@@ -71,7 +71,7 @@ int motor_ac_speed = 18;
 int motor_dc_ib = 33;
 int motor_dc_eb = 32;
 
-int pwm_speed = 512;
+int pwm_speed = 250;
 
 String command_data;
 int motor = 0;
@@ -87,7 +87,7 @@ AsyncWebServer server(80);
 AsyncWebSocket ws("/compass");
 
 const char* ssid = "SSID";
-const char* password = "PASSWD";
+const char* password = "password";
 
 //const char* PARAM_MESSAGE = "message";
 
@@ -122,28 +122,32 @@ void onWsEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventT
       
       if(command_json_msg["cmd"] == "go"){ // Command GO
       goTarget = command_json_msg["go_data"];
-      goTarget = constrain(goTarget, min_az_angle, max_az_angle);
-      goToAngle = 1; 
+
+      goTarget = constrain(goTarget, min_az_angle, max_az_angle); 
+      
       Serial.print("GoTarget: "); 
-      Serial.println(goTarget);
+      Serial.print(goTarget);
+
+      goToAngle = 1; 
+      pwm_speed = 250;
 
       }else if(command_json_msg["cmd"] == "ccw"){ // Command CCW
         Serial.println("<<<<<");
         motor = 1;
         goToAngle = 0;
-        pwm_speed = 512;
+        pwm_speed = 250;
       
       }else if(command_json_msg["cmd"] == "cw"){ // Command CW
         Serial.println(">>>>"); 
         motor = 2; 
         goToAngle = 0; 
-        pwm_speed = 512;
+        pwm_speed = 250;
 
       }else if(command_json_msg["cmd"] == "off"){ // Command OFF/STOP
         Serial.println("||||"); 
         motor = 0; 
         goToAngle = 0;  
-        pwm_speed = 512;
+        pwm_speed = 250;
 
       }
 
@@ -263,6 +267,9 @@ void setup() {
   
   
   pinMode(LED_BUILTIN,OUTPUT);
+
+  pinMode(motor_ac_speed,OUTPUT);
+  analogWrite(motor_ac_speed,255);
   
   Serial.begin(115200);
 
@@ -283,10 +290,10 @@ void setup() {
   ADCValue[5] = preferences.getInt("ADCValue5",Az[5]);
 
   // Set max a min constrain
-  max_az_analog = Az[5];
-  max_az_angle  = ADCValue[5];
-  min_az_analog = Az[0];
-  min_az_angle  = ADCValue[0];
+  max_az_analog = ADCValue[5];
+  max_az_angle  = Az[5];
+  min_az_analog = ADCValue[0];
+  min_az_angle  = Az[0];
 
  // ssid = preferences.getString("ssid", "");
 
@@ -358,7 +365,7 @@ void loop() {
   
   if(micros()-lastTime >= isTime){ // Time to refresh data
     
-    analog_in =  ( 0.25 * (float)analogRead(analogPin) ) + (analog_in * 0.75);
+    analog_in =  ( 0.75 * (float)analogRead(analogPin) ) + (analog_in * 0.25);
     //Serial.print("AD: ");
     //Serial.println(analog_in);
 
@@ -367,7 +374,7 @@ void loop() {
     //heading = constrain(heading, min_az_angle, max_az_angle); // Limit Angle values
     heading = mapADC(analog_in); 
     
-    //Serial.print("Compass Heading: "); Serial.println(new_head);
+    //Serial.print("Compass Heading: "); Serial.println(heading);
   
     rssi = WiFi.RSSI();
 
@@ -387,6 +394,7 @@ void loop() {
 
     //Serial.print("IP Address: ");
     //Serial.println(WiFi.localIP());
+    analogWrite(motor_ac_speed,pwm_speed);
     
   }
 
@@ -404,15 +412,13 @@ void loop() {
     }
 
     // If motor type = DC and Angle diference is less then 5 speed down the motor
-    if( motor_type == 1) {
-      if(abs(goTarget - heading) < 5){ 
-        pwm_speed = 300;
-      }else{
-        pwm_speed = 712;
-      }
+    if(abs(goTarget - heading) < 12){ 
+      pwm_speed = 100;
+    }else{
+      pwm_speed = 250;
     }
-    
   }
+  
 
   if(motor == 0) { // Set motor off
     digitalWrite(motor_ac_ccw,LOW);

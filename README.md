@@ -5,7 +5,13 @@
   -> Http requests: TBD
   
   Todo List:
-  - WiFi Manager
+  - Grid Locator auto point
+
+  
+  [Config](docs/interface_main.png)
+
+  [Interface](docs/interface_config.png)
+
   
 
   Author: Henrique B. Gravina - PU3IKE

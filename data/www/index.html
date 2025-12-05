@@ -49,12 +49,16 @@
             //console.log(msg);
             //console.log(msg["az_angle"]);
             if(msg["type"] == 0){
-
-                var adc_value = msg["adc_value"];
-                var rssi = msg["rssi"];
-                $("#Rssi").html("Wifi Rssi: "+rssi);
-                compass_gauge.value = msg["az_angle"];
-                $("#putdata").val(compass_gauge.value);
+                // Check if az_angle exists before updating the compass
+                if (msg.hasOwnProperty("az_angle")) {
+                    compass_gauge.value = msg["az_angle"];
+                    $("#putdata").val(compass_gauge.value);
+                }
+                // Check if rssi exists before updating the display
+                // Note: The RSSI div is in setup.html, but we keep the logic here in case it's added later.
+                if (msg.hasOwnProperty("rssi")) {
+                    $("#Rssi").html("Wifi Rssi: " + msg["rssi"]);
+                }
                 //console.log(compass_gauge.value);
             }
         }

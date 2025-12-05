@@ -19,51 +19,88 @@
             <div id="ADCValue"></div> 
         </div>
     </div>
-    <div class="row m-1" >
-        <div class="row-1 m-1 text-center">
-            Az 0:<input type="text" size=6 id="Az0" value="-40"/>
+    <hr>
+    <div class="row m-1">
+        <div class="col text-center"><strong>Network Settings</strong></div>
+    </div>
+    <div class="row m-1">
+        <div class="col-12 text-center">
+            Hostname:<input type="text" size=20 id="hostname"/>
         </div>
-        <div class="row-1 m-1 text-center">
+    </div>
+    <hr>
+    <div class="row m-1">
+        <div class="col text-center"><strong>General Settings</strong></div>
+    </div>
+    <div class="row m-1" >
+        <div class="col-6 text-center">
+            Motor Type:
+            <select id="motor_type">
+                <option value="0">AC</option>
+                <option value="1">DC</option>
+            </select>
+        </div>
+        <div class="col-6 text-center">
+            Analog Pin:<input type="text" size=4 id="analogPin"/>
+        </div>
+    </div>
+    <div class="row m-1" >
+        <div class="col-6 text-center">
+            ADC Interval (us):<input type="text" size=8 id="adcReadInterval"/>
+        </div>
+        <div class="col-6 text-center">
+            Filter (0.0-1.0):<input type="text" size=4 id="alphaFilter"/>
+        </div>
+    </div>
+    <hr>
+    <div class="row m-1">
+        <div class="col text-center"><strong>Calibration Table</strong></div>
+    </div>
+    <div class="row m-1" >
+        <div class="col-6 text-center">
+            Az 0:<input type="text" size=6 id="Az0" value=""/>
+        </div>
+        <div class="col-6 text-center">
             ADC Val0:<input type="text" size=6 id="ADCValue0"/>
         </div>
     </div>
     <div class="row m-1" >
-        <div class="row-6 m-1 text-center">
-            Az 1:<input type="text" size=6 id="Az1" value="0"/>
+        <div class="col-6 text-center">
+            Az 1:<input type="text" size=6 id="Az1" value=""/>
         </div>
-        <div class="row-6 m-1 text-center">
+        <div class="col-6 text-center">
             ADC Val1:<input type="text" size=6 id="ADCValue1"/>
         </div>
     </div>
     <div class="row m-1" >
-        <div class="row-6 m-1 text-center">
-            Az 2:<input type="text" size=6 id="Az2" value="90"/>
+        <div class="col-6 text-center">
+            Az 2:<input type="text" size=6 id="Az2" value=""/>
         </div>
-        <div class="row-6 m-1 text-center">
+        <div class="col-6 text-center">
             ADC Val2:<input type="text" size=6 id="ADCValue2"/>
         </div>
     </div>
     <div class="row m-1" >
-        <div class="row-6 m-1 text-center">
-            Az 3:<input type="text" size=6 id="Az3" value="180" />
+        <div class="col-6 text-center">
+            Az 3:<input type="text" size=6 id="Az3" value="" />
         </div>
-        <div class="row-6 m-1 text-center">
+        <div class="col-6 text-center">
             ADC Val3:<input type="text" size=6 id="ADCValue3"/>
         </div>
     </div>
     <div class="row m-1" >
-        <div class="row-6 m-1 text-center">
-            Az 4:<input type="text" size=6 id="Az4" value="270" />
+        <div class="col-6 text-center">
+            Az 4:<input type="text" size=6 id="Az4" value="" />
         </div>
-        <div class="row-6 m-1 text-center">
+        <div class="col-6 text-center">
             ADC Val4:<input type="text" size=6 id="ADCValue4"/>
         </div>
     </div>
     <div class="row m-1" >
-        <div class="row-6 m-1 text-center">
-            Az 5:<input type="text" size=6 id="Az5" value="360" />
+        <div class="col-6 text-center">
+            Az 5:<input type="text" size=6 id="Az5" value="" />
         </div>
-        <div class="row-6 m-1 text-center">
+        <div class="col-6 text-center">
             ADC Val5:<input type="text" size=6 id="ADCValue5"/>
         </div>
     </div>
@@ -74,7 +111,7 @@
     </div>
 </div>
 <script>
-    
+    var compassSocket;
     function connect() {
         
         compassSocket = new WebSocket("ws://" + location.host + "/compass");
@@ -86,37 +123,32 @@
 
             // Type 0 = Status
             if(msg["type"] == 0){
-
-                var adc_value = msg["adc_value"];
-                var rssi = msg["rssi"];
-                $("#ADCValue").html("ADC Value:"+adc_value);
-                $("#Rssi").html("Wifi Rssi: "+rssi);
-
+                // Check for each key before updating the HTML
+                if (msg.hasOwnProperty("adc_value")) {
+                    $("#ADCValue").html("ADC Value:" + msg["adc_value"]);
+                }
+                if (msg.hasOwnProperty("rssi")) {
+                    $("#Rssi").html("Wifi Rssi: " + msg["rssi"]);
+                }
             }else if(msg["type"] == 1){
-                $("#Az0").val(msg["Az0"]);
-                $("#Az1").val(msg["Az1"]);
-                $("#Az2").val(msg["Az2"]);
-                $("#Az3").val(msg["Az3"]);
-                $("#Az4").val(msg["Az4"]);
-                $("#Az5").val(msg["Az5"]);
-
-                $("#ADCValue0").val(msg["ADCValue0"]);
-                $("#ADCValue1").val(msg["ADCValue1"]);
-                $("#ADCValue2").val(msg["ADCValue2"]);
-                $("#ADCValue3").val(msg["ADCValue3"]);
-                $("#ADCValue4").val(msg["ADCValue4"]);
-                $("#ADCValue5").val(msg["ADCValue5"]);
-
+                for (let i = 0; i < 6; i++) {
+                    $("#Az" + i).val(msg["Az" + i]);
+                    $("#ADCValue" + i).val(msg["ADCValue" + i]);
+                }
+                // Populate new fields
+                $("#motor_type").val(msg["motor_type"]);
+                $("#analogPin").val(msg["analogPin"]);
+                $("#adcReadInterval").val(msg["adcReadInterval"]);
+                $("#alphaFilter").val(msg["alphaFilter"]);
+                $("#hostname").val(msg["hostname"]);
             }
-        
-
-        
         };
 
          // Type 0 = Commands
          // Type 1 = Get config
          // Type 2 = Set Config
 
+        // When the socket is opened, request the current configuration
         compassSocket.onopen = function(e) {
             
             start_Json = { 'type':'1' } 
@@ -136,27 +168,28 @@
     
     
     $(document).ready(function() {
-        var val = 0;
-    
         $('#Save').on('click',function (e) {
 
-            conf_Json = { 'type':'2', // Set type as AD X Angle config
-                      'Az0':$("#Az0").val(),
-                      'Az1':$("#Az1").val(),
-                      'Az2':$("#Az2").val(),
-                      'Az3':$("#Az3").val(),
-                      'Az4':$("#Az4").val(),
-                      'Az5':$("#Az5").val(),
+            var conf_Json = { 
+                'type':'2' // Set type as AD X Angle config
+            };
 
-                      'ADCValue0':$("#ADCValue0").val(),
-                      'ADCValue1':$("#ADCValue1").val(),
-                      'ADCValue2':$("#ADCValue2").val(),
-                      'ADCValue3':$("#ADCValue3").val(),
-                      'ADCValue4':$("#ADCValue4").val(),
-                      'ADCValue5':$("#ADCValue5").val(),
-                    };
+            for (let i = 0; i < 6; i++) {
+                conf_Json['Az' + i] = $("#Az" + i).val();
+                conf_Json['ADCValue' + i] = $("#ADCValue" + i).val();
+            }
 
-            compassSocket.send(JSON.stringify(conf_Json));
+            // Add new config values to JSON
+            conf_Json['motor_type'] = $("#motor_type").val();
+            conf_Json['analogPin'] = $("#analogPin").val();
+            conf_Json['adcReadInterval'] = $("#adcReadInterval").val();
+            conf_Json['alphaFilter'] = $("#alphaFilter").val();
+            conf_Json['hostname'] = $("#hostname").val();
+
+            if (compassSocket.readyState === WebSocket.OPEN) {
+                compassSocket.send(JSON.stringify(conf_Json));
+                alert("Configuration saved!");
+            }
             
         });
     

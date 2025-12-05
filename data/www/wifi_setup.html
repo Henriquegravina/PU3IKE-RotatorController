@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Configuracao Wi-Fi do Rotor</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="css/bootstrap.css">
+</head>
+<body>
+    <div class="border border-primary m-5 bg-white rounded" style="width:500px;">
+        <div class="row m-1">
+            <div class="col text-center">
+                <h3>Configurar Wi-Fi do Rotor</h3>
+            </div>
+        </div>
+        <div class="p-3">
+            <form action="/save" method="post">
+                <div class="form-group">
+                    <label for="ssid">Rede Wi-Fi (SSID):</label>
+                    <input type="text" class="form-control" id="ssid" name="ssid" placeholder="Nome da rede" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">Senha:</label>
+                    <input type="password" class="form-control" id="password" name="password" placeholder="Senha da rede">
+                </div>
+                <button type="submit" class="btn btn-primary btn-block">Salvar e Reiniciar</button>
+            </form>
+            <hr>
+            <div class="alert alert-info" role="alert">
+                Apos salvar, o dispositivo ira reiniciar. Conecte-se a sua rede Wi-Fi normal e acesse o rotor pelo seu novo IP ou pelo endereco .local configurado.
+            </div>
+        </div>
+    </div>
+    <script src="js/jquery-3.5.1.min.js"></script>
+    <script src="js/bootstrap.js"></script>
+</body>
+</html>

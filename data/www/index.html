@@ -1,115 +1,147 @@
 <!doctype html>
 <html>
 <head>
-    <title>Controle de Rotor PU3IKE</title>
+    <title>Controle de Rotor &mdash; PU3IKE</title>
     <link rel="stylesheet" href="css/bootstrap.css">
     <script src="js/jquery-3.5.1.min.js"></script>
     <script src="js/bootstrap.js"></script>
     <script src="js/gauge.min.js"></script>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body, body.light {
+            --bg:#f0f2f5; --panel:#fff; --text:#212529; --muted:#6c757d;
+            --accent:#0b5ed7; --border:#dee2e6;
+            --btn-bg:#0b5ed7; --btn-text:#fff;
+            --header-bg:#0b5ed7; --header-text:#fff;
+        }
+        body.dark {
+            --bg:#0a0a0a; --panel:#141414; --text:#e07b00; --muted:#555;
+            --accent:#e07b00; --border:#252525;
+            --btn-bg:#b36000; --btn-text:#0a0a0a;
+            --header-bg:#0a0a0a; --header-text:#e07b00;
+        }
+        body { background:var(--bg); color:var(--text); transition:background .2s,color .2s; }
+        .r-header { background:var(--header-bg); color:var(--header-text); padding:10px 16px;
+            display:flex; align-items:center; justify-content:space-between;
+            border-bottom:2px solid var(--accent); }
+        .r-header h5 { margin:0; font-size:.95rem; font-weight:700; letter-spacing:.04em; }
+        .r-header a { color:var(--header-text); text-decoration:none; padding:3px 9px;
+            border:1px solid var(--header-text); border-radius:4px; font-size:.78rem; opacity:.75; }
+        .r-header a:hover { opacity:1; }
+        .theme-btn { background:transparent; border:1px solid var(--header-text);
+            color:var(--header-text); padding:3px 9px; border-radius:4px; cursor:pointer; font-size:.78rem; }
+        .panel { background:var(--panel); border:1px solid var(--border); border-radius:8px;
+            padding:14px; max-width:440px; margin:14px auto; }
+        .compass-wrap { display:flex; justify-content:center; margin-bottom:10px; }
+        .az-display { text-align:center; font-size:2.4rem; font-weight:700; color:var(--accent);
+            font-family:monospace; letter-spacing:.06em; margin-bottom:10px; }
+        .az-display span.deg { font-size:1.2rem; color:var(--muted); }
+        .input-row { display:flex; gap:8px; align-items:center; margin-bottom:10px; }
+        .input-row label { color:var(--muted); font-size:.82rem; margin:0; white-space:nowrap; }
+        .input-row input { flex:1; background:var(--bg)!important; color:var(--text)!important;
+            border-color:var(--border)!important; font-size:.85rem; }
+        .btn-row { display:flex; gap:8px; }
+        .r-btn { flex:1; padding:11px 0; background:var(--btn-bg); color:var(--btn-text);
+            border:none; border-radius:5px; font-weight:700; font-size:.9rem; cursor:pointer; }
+        .r-btn:active { filter:brightness(.85); }
+        .r-btn.go { flex:0; padding:9px 18px; }
+        .rssi-bar { text-align:center; font-size:.75rem; color:var(--muted); margin-top:10px; }
+    </style>
 </head>
 <body>
-<div class="border border-primary m-5 bg-white rounded" style="width:500px;" >
-    <div class="row">
-        <div class="col-sm m-5">
-            <canvas id='compass_canvas'></canvas>
-            <script src="js/compass.js"></script>
-        </div>
-    </div>
-    <div class="row m-1" >
-        
-        <div class="col-6 text-center">
-            Az:<input type="text" id="putdata"/>
-        </div>
-        <div class="col-6 text-center">
-            Go:<input type="text" id="go_data"/>
-        </div>
-    </div>
-    <div class="row m-1">
-        <div class="col m-4 text-center">
-            <button type="button" class="btn btn-primary" id="CCW" >CCW</button>
-        </div>
-        <div class="col m-4 text-center">
-            <button type="button" class="btn btn-primary" id="Go" >Go!</button>
-        </div>
-        <div class="col m-4 text-center">
-            <button type="button" class="btn btn-primary" id="CW" >CW</button>
-        </div>
+
+<div class="r-header">
+    <h5>&#128225; Rotor &mdash; PU3IKE</h5>
+    <div style="display:flex;gap:7px;align-items:center;">
+        <a href="/setup.html">&#9881; Setup</a>
+        <button class="theme-btn" onclick="toggleTheme()">&#9728; / &#9790;</button>
     </div>
 </div>
+
+<div class="panel">
+    <div class="compass-wrap">
+        <canvas id='compass_canvas'></canvas>
+        <script src="js/compass.js"></script>
+    </div>
+
+    <div class="az-display" id="az_display">---<span class="deg">&deg;</span></div>
+
+    <div class="input-row">
+        <label>Ir para:</label>
+        <input type="number" class="form-control form-control-sm" id="go_data" placeholder="0 – 360">
+        <button class="r-btn go" id="Go">Ir!</button>
+    </div>
+
+    <div class="btn-row">
+        <button class="r-btn" id="CCW">&#9664; CCW</button>
+        <button class="r-btn" id="CW">CW &#9654;</button>
+    </div>
+
+    <div class="rssi-bar" id="rssi_display">RSSI: --</div>
+</div>
+
 <script>
-    
-    function connect() {
-        
-        compassSocket = new WebSocket("ws://" + location.host + "/compass");
-        
-        compassSocket.onmessage = function(event){
-            var msg = JSON.parse(event.data);
-            //if( Math.abs(compass_gauge.value - msg) >= 3 ) compass_gauge.value = msg;
-            //console.log(msg);
-            //console.log(msg["az_angle"]);
-            if(msg["type"] == 0){
-                // Check if az_angle exists before updating the compass
-                if (msg.hasOwnProperty("az_angle")) {
-                    compass_gauge.value = msg["az_angle"];
-                    $("#putdata").val(compass_gauge.value);
-                }
-                // Check if rssi exists before updating the display
-                // Note: The RSSI div is in setup.html, but we keep the logic here in case it's added later.
-                if (msg.hasOwnProperty("rssi")) {
-                    $("#Rssi").html("Wifi Rssi: " + msg["rssi"]);
-                }
-                //console.log(compass_gauge.value);
-            }
-        }
-    
-        compassSocket.onclose = function(e) {
-            console.log('Socket is closed. Reconnect will be attempted in 1 second.', e.reason);
-                setTimeout(function() {
-                connect();
-                }, 1000);
-        };
+    // ── Theme + gauge colors ──────────────────────────────────
+    var GAUGE_THEMES = {
+        light: { colorNeedle:'rgba(240,128,128,1)', colorNeedleEnd:'rgba(255,160,122,.9)',
+                 colorBorderOuter:'#bbb', colorBorderOuterEnd:'#bbb' },
+        dark:  { colorNeedle:'rgba(220,115,0,1)',   colorNeedleEnd:'rgba(200,95,0,.9)',
+                 colorBorderOuter:'#3a2200', colorBorderOuterEnd:'#3a2200' }
+    };
+    function applyTheme(t) {
+        document.body.classList.toggle('dark', t === 'dark');
+        localStorage.setItem('theme', t);
+        if (typeof compass_gauge !== 'undefined') compass_gauge.update(GAUGE_THEMES[t]);
     }
-    
+    function toggleTheme() {
+        applyTheme(document.body.classList.contains('dark') ? 'light' : 'dark');
+    }
+    applyTheme(localStorage.getItem('theme') || 'light');
+
+    // ── Real values ───────────────────────────────────────────
+    var showReal = localStorage.getItem('showRealValues') === 'true';
+    function toDisplay(az) { return (showReal && az < 0) ? (360 + az) : az; }
+
+    // ── WebSocket ─────────────────────────────────────────────
+    var compassSocket;
+    function connect() {
+        compassSocket = new WebSocket("ws://" + location.host + "/compass");
+        compassSocket.onmessage = function(event) {
+            var msg = JSON.parse(event.data);
+            if (msg.type == 0) {
+                if (msg.az_angle !== undefined) {
+                    var az = msg.az_angle;
+                    compass_gauge.value = ((az % 360) + 360) % 360;
+                    $("#az_display").html(toDisplay(az) + '<span class="deg">&deg;</span>');
+                }
+                if (msg.rssi !== undefined) $("#rssi_display").text("RSSI: " + msg.rssi + " dBm");
+            }
+        };
+        compassSocket.onclose = function() { setTimeout(connect, 1000); };
+    }
     connect();
-    
-    
+
+    // ── Controls ──────────────────────────────────────────────
     $(document).ready(function() {
-        var val = 0;
-    
-        $('#Go').on('mousedown',function (e) {
-            start_Json = { 'type':'0','cmd':'go','go_data': $("#go_data").val()} 
-            compassSocket.send(JSON.stringify(start_Json));
+        $('#Go').on('click', function() {
+            compassSocket.send(JSON.stringify({type:'0', cmd:'go', go_data: $("#go_data").val()}));
         });
-
-        $('#CCW').on('mousedown touchstart',function (e) {
-            start_Json = { 'type':'0','cmd':'ccw'} 
-            compassSocket.send(JSON.stringify(start_Json));
+        $('#CCW').on('mousedown touchstart', function(e) {
+            e.preventDefault();
+            compassSocket.send(JSON.stringify({type:'0', cmd:'ccw'}));
         });
-        
-        // mouseleve is needed to interface control send stop when mouse is not on button
-        // but it will send the off if hover off to
-
-        $('#CCW').on("mouseleave mouseup touchend", function () {
-            start_Json = { 'type':'0','cmd':'off'} 
-            compassSocket.send(JSON.stringify(start_Json));
+        $('#CCW').on('mouseup mouseleave touchend', function() {
+            compassSocket.send(JSON.stringify({type:'0', cmd:'off'}));
         });
-    
-    
-        $('#CW').on('mousedown touchstart',function (e) {
-            start_Json = { 'type':'0','cmd':'cw'} 
-            compassSocket.send(JSON.stringify(start_Json));
+        $('#CW').on('mousedown touchstart', function(e) {
+            e.preventDefault();
+            compassSocket.send(JSON.stringify({type:'0', cmd:'cw'}));
         });
-    
-        $('#CW').on("mouseleave mouseup touchend", function () {
-            start_Json = { 'type':'0','cmd':'off'} 
-            compassSocket.send(JSON.stringify(start_Json));
+        $('#CW').on('mouseup mouseleave touchend', function() {
+            compassSocket.send(JSON.stringify({type:'0', cmd:'off'}));
         });
-
-
-    
     });
-    </script>
-
+</script>
 </body>
 </html>

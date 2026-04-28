@@ -19,6 +19,8 @@
 #include <ESPAsyncWebServer.h>
 #include <AsyncJson.h>
 #include <AsyncWebSocket.h>
+#include <ArduinoOTA.h>
+#include <Update.h>
 
 #include <Preferences.h>
 Preferences preferences;
@@ -92,6 +94,7 @@ int motor_type = 0; // 0 = AC, 1 = DC
 int analogPin = 34;
 float alphaFilter = 0.1;
 String hostname = "rotor-dxs2800";
+bool shortestPath = true; // Use shortest path algorithm for GO command
 
 AsyncWebServer server(80);
 AsyncWebSocket ws("/compass");
@@ -100,19 +103,86 @@ AsyncWebSocket ws("/compass");
 String ssid;
 String password;
 DNSServer dnsServer;
+bool staMode = false;
+bool spiffsRecovery = false;
+
+// Minimal inline page served when SPIFFS is corrupted
+static const char RECOVERY_HTML[] PROGMEM = R"rawhtml(
+<!doctype html><html><head>
+<title>SPIFFS Recovery</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+body{font-family:monospace;background:#0a0a0a;color:#e07b00;padding:20px;max-width:420px;margin:0 auto;}
+h2{border-bottom:1px solid #e07b00;padding-bottom:8px;}
+input[type=file]{background:#111;color:#e07b00;border:1px solid #333;padding:6px;width:100%;box-sizing:border-box;margin:8px 0;}
+button{background:#e07b00;color:#000;padding:10px 0;border:none;border-radius:4px;cursor:pointer;font-weight:700;font-size:.95rem;width:100%;margin-top:4px;}
+.hint{font-size:.75rem;color:#555;margin-top:6px;}
+#st{margin-top:12px;font-size:.9rem;}
+</style></head><body>
+<h2>&#9888; SPIFFS Recovery</h2>
+<p>O filesystem foi corrompido e reformatado.<br>
+Envie o <code>spiffs.bin</code> para restaurar a interface web.</p>
+<input type="file" id="f" accept=".bin">
+<div class="hint">.pio/build/esp32doit-devkit-v1/spiffs.bin</div>
+<button onclick="up()">Enviar SPIFFS</button>
+<div id="st"></div>
+<script>
+function up(){
+  var f=document.getElementById('f').files[0];
+  if(!f){alert('Selecione spiffs.bin');return;}
+  var fd=new FormData();fd.append('file',f);
+  document.getElementById('st').textContent='Enviando...';
+  fetch('/update-fs',{method:'POST',body:fd})
+    .then(function(r){return r.text();})
+    .then(function(t){document.getElementById('st').textContent=t;})
+    .catch(function(){document.getElementById('st').textContent='Erro no upload.';});
+}
+</script></body></html>
+)rawhtml";
 
 void notFound(AsyncWebServerRequest *request) {
     request->send(404, "text/plain", "Not found");
 }
 
+// Normalize a compass input (0-360) to the rotor's linear coordinate space.
+// If the same bearing exists as both rawTarget and rawTarget-360 within the
+// mechanical limits, pick the one closest to the current heading.
+int normalizeTarget(int rawTarget) {
+    int current = (int)heading;
+    int best = rawTarget;
+    int alt  = rawTarget - 360;
+
+    bool bestOk = (best >= (int)min_az_angle && best <= (int)max_az_angle);
+    bool altOk  = (alt  >= (int)min_az_angle && alt  <= (int)max_az_angle);
+
+    if (bestOk && altOk) {
+        return (abs(best - current) <= abs(alt - current)) ? best : alt;
+    } else if (altOk) {
+        return alt;
+    } else if (bestOk) {
+        return best;
+    } else {
+        return constrain(rawTarget, (int)min_az_angle, (int)max_az_angle);
+    }
+}
+
 void handleGoCommand(const JsonDocument& doc) {
     if (!doc["go_data"].isNull()) {
-        goTarget = doc["go_data"];
-        goTarget = constrain(goTarget, min_az_angle, max_az_angle);
-        Serial.print("GoTarget: ");
-        Serial.println(goTarget);
+        int rawTarget = (int)(float)doc["go_data"];
+        goTarget = normalizeTarget(rawTarget);
         goToAngle = 1;
         pwm_speed = 250;
+        int current = (int)heading;
+        int cw_dist  = ((goTarget - current) + 360) % 360;
+        int ccw_dist = ((current - goTarget) + 360) % 360;
+        bool cw_ok   = ((float)(current + cw_dist)  <= max_az_angle);
+        bool ccw_ok  = ((float)(current - ccw_dist) >= min_az_angle);
+        Serial.printf("GoTo %d (input:%d) from %d | CW:%d(%s) CCW:%d(%s) -> %s\n",
+            goTarget, rawTarget, current,
+            cw_dist,  cw_ok  ? "ok" : "X",
+            ccw_dist, ccw_ok ? "ok" : "X",
+            (cw_ok && (!ccw_ok || cw_dist <= ccw_dist)) ? "CW" : "CCW");
     }
 }
 
@@ -150,6 +220,12 @@ void sendConfig(AsyncWebSocketClient* client) {
     config_json_msg["adcReadInterval"] = adcReadInterval;
     config_json_msg["alphaFilter"] = alphaFilter;
     config_json_msg["hostname"] = hostname;
+    config_json_msg["motor_ac_cw"] = motor_ac_cw;
+    config_json_msg["motor_ac_ccw"] = motor_ac_ccw;
+    config_json_msg["motor_ac_speed"] = motor_ac_speed;
+    config_json_msg["motor_dc_ib"] = motor_dc_ib;
+    config_json_msg["motor_dc_eb"] = motor_dc_eb;
+    config_json_msg["shortestPath"] = shortestPath;
 
     String json_output;
     serializeJson(config_json_msg, json_output);
@@ -191,6 +267,30 @@ void saveConfig(const JsonDocument& doc) {
     if (!doc["hostname"].isNull()) {
         hostname = doc["hostname"].as<String>();
         preferences.putString("hostname", hostname);
+    }
+    if (!doc["motor_ac_cw"].isNull()) {
+        motor_ac_cw = doc["motor_ac_cw"];
+        preferences.putInt("motor_ac_cw", motor_ac_cw);
+    }
+    if (!doc["motor_ac_ccw"].isNull()) {
+        motor_ac_ccw = doc["motor_ac_ccw"];
+        preferences.putInt("motor_ac_ccw", motor_ac_ccw);
+    }
+    if (!doc["motor_ac_speed"].isNull()) {
+        motor_ac_speed = doc["motor_ac_speed"];
+        preferences.putInt("motor_ac_spd", motor_ac_speed);
+    }
+    if (!doc["motor_dc_ib"].isNull()) {
+        motor_dc_ib = doc["motor_dc_ib"];
+        preferences.putInt("motor_dc_ib", motor_dc_ib);
+    }
+    if (!doc["motor_dc_eb"].isNull()) {
+        motor_dc_eb = doc["motor_dc_eb"];
+        preferences.putInt("motor_dc_eb", motor_dc_eb);
+    }
+    if (!doc["shortestPath"].isNull()) {
+        shortestPath = doc["shortestPath"];
+        preferences.putBool("shortestPath", shortestPath);
     }
 
     //Set max and min constrain
@@ -295,39 +395,70 @@ int mapADC(int adcValue) {
 
 void setupAP() {
   WiFi.mode(WIFI_AP);
-  WiFi.softAP("Rotor-Setup");
-  Serial.print("AP IP address: ");
+
+  // Build AP name with last 2 MAC bytes for identification
+  uint8_t mac[6];
+  WiFi.macAddress(mac);
+  char apName[24];
+  snprintf(apName, sizeof(apName), "Rotor-Setup-%02X%02X", mac[4], mac[5]);
+
+  WiFi.softAP(apName);
+  Serial.printf("AP started: %s\n", apName);
+  Serial.print("AP IP: ");
   Serial.println(WiFi.softAPIP());
 
-  // DNS server for captive portal
   dnsServer.start(53, "*", WiFi.softAPIP());
 
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SPIFFS, "/www/wifi_setup.html", "text/html");
-  });
-  // Serve static files for the setup page
-  server.serveStatic("/css", SPIFFS, "/www/css");
-  server.serveStatic("/js", SPIFFS, "/www/js");
+  if (spiffsRecovery) {
+    // SPIFFS was corrupted — serve inline recovery page
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+      request->send_P(200, "text/html", RECOVERY_HTML);
+    });
 
-  server.on("/save", HTTP_POST, [](AsyncWebServerRequest *request){
-    if (request->hasParam("ssid", true) && request->hasParam("password", true)) {
-      String ssid_ap = request->getParam("ssid", true)->value();
-      String password_ap = request->getParam("password", true)->value();
-      
-      preferences.putString("ssid", ssid_ap);
-      preferences.putString("password", password_ap);
+    // SPIFFS OTA upload endpoint
+    server.on("/update-fs", HTTP_POST,
+      [](AsyncWebServerRequest *request){
+        bool ok = !Update.hasError();
+        request->send(200, "text/plain", ok ? "SPIFFS restaurado! Reiniciando..." : "FALHOU.");
+        if (ok) { delay(500); ESP.restart(); }
+      },
+      [](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
+        if (!index) {
+          Serial.println("Recovery SPIFFS upload start");
+          if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_SPIFFS)) Update.printError(Serial);
+        }
+        if (!Update.hasError() && Update.write(data, len) != len) Update.printError(Serial);
+        if (final) {
+          if (Update.end(true)) Serial.printf("Recovery SPIFFS OK: %u bytes\n", index + len);
+          else Update.printError(Serial);
+        }
+      }
+    );
 
-      String response_html = "<html><body><h1>Configuracoes salvas!</h1><p>O dispositivo sera reiniciado. Conecte-se a sua rede Wi-Fi e acesse o rotor pelo seu novo IP ou pelo endereco <code>" + hostname + ".local</code>.</p></body></html>";
-      request->send(200, "text/html", response_html);
+  } else {
+    // Normal WiFi setup
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+      request->send(SPIFFS, "/www/wifi_setup.html", "text/html");
+    });
+    server.serveStatic("/css", SPIFFS, "/www/css");
+    server.serveStatic("/js", SPIFFS, "/www/js");
 
-      delay(2000);
-      ESP.restart();
-    } else {
-      request->send(400, "text/plain", "SSID ou senha ausentes.");
-    }
-  });
+    server.on("/save", HTTP_POST, [](AsyncWebServerRequest *request){
+      if (request->hasParam("ssid", true) && request->hasParam("password", true)) {
+        String ssid_ap = request->getParam("ssid", true)->value();
+        String password_ap = request->getParam("password", true)->value();
+        preferences.putString("ssid", ssid_ap);
+        preferences.putString("password", password_ap);
+        String html = "<html><body><h1>Configuracoes salvas!</h1><p>Reconecte-se a sua rede e acesse <code>" + hostname + ".local</code></p></body></html>";
+        request->send(200, "text/html", html);
+        delay(2000);
+        ESP.restart();
+      } else {
+        request->send(400, "text/plain", "SSID ou senha ausentes.");
+      }
+    });
+  }
 
-  // Redirect all other requests to the root
   server.onNotFound([](AsyncWebServerRequest *request){
     request->redirect("/");
   });
@@ -347,6 +478,13 @@ void loadPreferences() {
     adcReadInterval = preferences.getULong("adcReadInterval", adcReadInterval);
     alphaFilter = preferences.getFloat("alphaFilter", alphaFilter);
     hostname = preferences.getString("hostname", hostname);
+
+    motor_ac_cw    = preferences.getInt("motor_ac_cw",  motor_ac_cw);
+    motor_ac_ccw   = preferences.getInt("motor_ac_ccw", motor_ac_ccw);
+    motor_ac_speed = preferences.getInt("motor_ac_spd", motor_ac_speed);
+    motor_dc_ib    = preferences.getInt("motor_dc_ib",  motor_dc_ib);
+    motor_dc_eb    = preferences.getInt("motor_dc_eb",  motor_dc_eb);
+    shortestPath   = preferences.getBool("shortestPath", shortestPath);
 
     // Load WiFi credentials
     ssid = preferences.getString("ssid", "");
@@ -380,13 +518,14 @@ void setup() {
   loadPreferences();
 
   // Initialize SPIFFS
-  if(!SPIFFS.begin()){
-    Serial.println("An Error has occurred while mounting SPIFFS");
-    return;
+  if (!SPIFFS.begin(false)) {
+    Serial.println("SPIFFS mount failed — formatting and entering recovery AP mode");
+    SPIFFS.begin(true); // format so partition is usable
+    spiffsRecovery = true;
   }
 
-  if (ssid == "") {
-    Serial.println("Nenhuma credencial Wi-Fi encontrada. Iniciando modo de configuracao (AP)...");
+  if (ssid == "" || spiffsRecovery) {
+    Serial.println(spiffsRecovery ? "SPIFFS recovery AP mode" : "No WiFi credentials. Starting AP...");
     setupAP();
   } else {
     Serial.println("Conectando ao Wi-Fi...");
@@ -413,8 +552,100 @@ void setup() {
         MDNS.addService("http", "tcp", 80);
     }
 
+    // ArduinoOTA setup (allows PlatformIO/IDE OTA uploads)
+    ArduinoOTA.setHostname(hostname.c_str());
+    ArduinoOTA.onStart([]() {
+        motor = MOTOR_OFF;
+        Serial.println("OTA update starting...");
+    });
+    ArduinoOTA.onEnd([]() {
+        Serial.println("\nOTA update complete.");
+    });
+    ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+        Serial.printf("OTA Progress: %u%%\r", (progress / (total / 100)));
+    });
+    ArduinoOTA.onError([](ota_error_t error) {
+        Serial.printf("OTA Error[%u]\n", error);
+    });
+    ArduinoOTA.begin();
+    staMode = true;
+
     ws.onEvent(onWsEvent);
     server.addHandler(&ws);
+
+    // Web OTA filesystem (SPIFFS) upload endpoint
+    server.on("/update-fs", HTTP_POST,
+        [](AsyncWebServerRequest *request) {
+            bool success = !Update.hasError();
+            AsyncWebServerResponse *response = request->beginResponse(
+                200, "text/plain", success ? "SPIFFS OK. Rebooting..." : "SPIFFS FAILED"
+            );
+            response->addHeader("Connection", "close");
+            request->send(response);
+            if (success) {
+                delay(500);
+                ESP.restart();
+            }
+        },
+        [](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+            if (!index) {
+                motor = MOTOR_OFF;
+                Serial.printf("SPIFFS OTA start: %s\n", filename.c_str());
+                if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_SPIFFS)) {
+                    Update.printError(Serial);
+                }
+            }
+            if (!Update.hasError()) {
+                if (Update.write(data, len) != len) {
+                    Update.printError(Serial);
+                }
+            }
+            if (final) {
+                if (Update.end(true)) {
+                    Serial.printf("SPIFFS OTA success: %u bytes\n", index + len);
+                } else {
+                    Update.printError(Serial);
+                }
+            }
+        }
+    );
+
+    // Web OTA firmware upload endpoint
+    server.on("/update", HTTP_POST,
+        [](AsyncWebServerRequest *request) {
+            bool success = !Update.hasError();
+            AsyncWebServerResponse *response = request->beginResponse(
+                200, "text/plain", success ? "Update OK. Rebooting..." : "Update FAILED"
+            );
+            response->addHeader("Connection", "close");
+            request->send(response);
+            if (success) {
+                delay(500);
+                ESP.restart();
+            }
+        },
+        [](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+            if (!index) {
+                motor = MOTOR_OFF;
+                Serial.printf("OTA web start: %s\n", filename.c_str());
+                if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
+                    Update.printError(Serial);
+                }
+            }
+            if (!Update.hasError()) {
+                if (Update.write(data, len) != len) {
+                    Update.printError(Serial);
+                }
+            }
+            if (final) {
+                if (Update.end(true)) {
+                    Serial.printf("OTA web success: %u bytes\n", index + len);
+                } else {
+                    Update.printError(Serial);
+                }
+            }
+        }
+    );
 
     // Endpoint para ir para uma direção via URL
     server.on("/go", HTTP_GET, [](AsyncWebServerRequest *request) {
@@ -423,8 +654,7 @@ void setup() {
             direction = request->getParam("direction")->value();
             request->send(200, "text/plain", direction);
 
-            goTarget = direction.toInt();
-            goTarget = constrain(goTarget, min_az_angle, max_az_angle);
+            goTarget = normalizeTarget(direction.toInt());
             goToAngle = 1;
             Serial.print("URL Go Target: ");
             Serial.println(goTarget);
@@ -440,16 +670,44 @@ void setup() {
         
 }
 
+// Returns MOTOR_CW or MOTOR_CCW choosing the shortest path within the mechanical limits.
+int computeDirection() {
+    int current = (int)heading;
+    int target  = goTarget;
+
+    // Angular distance in each direction (always positive, 0-359)
+    int cw_dist  = ((target - current) + 360) % 360;
+    int ccw_dist = ((current - target) + 360) % 360;
+
+    // Check whether each path stays within the rotor's mechanical limits
+    bool cw_ok  = ((float)(current + cw_dist)  <= max_az_angle);
+    bool ccw_ok = ((float)(current - ccw_dist) >= min_az_angle);
+
+    int dir;
+    if (cw_ok && ccw_ok) {
+        dir = (cw_dist <= ccw_dist) ? MOTOR_CW : MOTOR_CCW;
+    } else if (cw_ok) {
+        dir = MOTOR_CW;
+    } else if (ccw_ok) {
+        dir = MOTOR_CCW;
+    } else {
+        // Fallback: simple comparison (should not happen if target is within range)
+        dir = (current < target) ? MOTOR_CW : MOTOR_CCW;
+    }
+
+    return dir;
+}
+
 void updateMotorController() {
-  if(goToAngle == 1){ // Turn motor on until reach the disered angle
+  if(goToAngle == 1){ // Turn motor on until reach the desired angle
 
     if(abs(goTarget - (int)heading) <= 1){
       motor = MOTOR_OFF;
       goToAngle = 0;
-    }else if ((int)heading > goTarget) {
-      motor = MOTOR_CCW;
-    }else if ((int)heading < goTarget) {
-      motor = MOTOR_CW;
+    } else if (shortestPath) {
+      motor = computeDirection();
+    } else {
+      motor = ((int)heading < goTarget) ? MOTOR_CW : MOTOR_CCW;
     }
 
     // If motor type = DC and Angle diference is less then 5 speed down the motor
@@ -535,6 +793,11 @@ void checkRssiAndBroadcast() {
 }
 
 void loop() {
+  if (!staMode) {
+    dnsServer.processNextRequest();
+    return;
+  }
+  ArduinoOTA.handle();
   if(micros()  - lastAdcTime >= adcReadInterval){
     lastAdcTime = micros();
     readSensorAndBroadcast();

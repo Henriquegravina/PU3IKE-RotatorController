@@ -1,200 +1,280 @@
 <!doctype html>
 <html>
 <head>
-    <title>Controle de Rotor PU3IKE</title>
+    <title>Rotor Setup — PU3IKE</title>
     <link rel="stylesheet" href="css/bootstrap.css">
     <script src="js/jquery-3.5.1.min.js"></script>
     <script src="js/bootstrap.js"></script>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body, body.light {
+            --bg:#f0f2f5; --panel:#fff; --text:#212529; --muted:#6c757d;
+            --accent:#0b5ed7; --accent-dim:#e8f0fe; --border:#dee2e6;
+            --input-bg:#fff; --input-text:#212529; --input-border:#ced4da;
+            --header-bg:#0b5ed7; --header-text:#fff;
+            --save-bg:#198754; --save-text:#fff;
+        }
+        body.dark {
+            --bg:#0a0a0a; --panel:#141414; --text:#e07b00; --muted:#666;
+            --accent:#e07b00; --accent-dim:#1a1200; --border:#252525;
+            --input-bg:#0a0a0a; --input-text:#e07b00; --input-border:#333;
+            --header-bg:#0a0a0a; --header-text:#e07b00;
+            --save-bg:#b36000; --save-text:#0a0a0a;
+        }
+        body { background:var(--bg); color:var(--text); transition:background .2s,color .2s; font-size:.88rem; }
+        /* Header */
+        .r-header { background:var(--header-bg); color:var(--header-text); padding:10px 16px;
+            display:flex; align-items:center; justify-content:space-between;
+            border-bottom:2px solid var(--accent); position:sticky; top:0; z-index:100; }
+        .r-header h5 { margin:0; font-size:.95rem; font-weight:700; letter-spacing:.04em; }
+        .r-header a { color:var(--header-text); text-decoration:none; padding:3px 9px;
+            border:1px solid var(--header-text); border-radius:4px; font-size:.78rem; opacity:.75; }
+        .r-header a:hover { opacity:1; }
+        .theme-btn { background:transparent; border:1px solid var(--header-text);
+            color:var(--header-text); padding:3px 9px; border-radius:4px; cursor:pointer; font-size:.78rem; }
+        /* Status */
+        .r-status { background:var(--panel); border-bottom:1px solid var(--border);
+            padding:4px 16px; font-size:.78rem; color:var(--muted); display:flex; gap:20px; }
+        /* Cards */
+        .r-card { background:var(--panel); border:1px solid var(--border); border-radius:6px; margin-bottom:10px; overflow:hidden; }
+        .r-card-header { background:var(--accent-dim); border-bottom:1px solid var(--border);
+            padding:5px 14px; font-size:.7rem; font-weight:700; text-transform:uppercase;
+            letter-spacing:.1em; color:var(--accent); }
+        .r-card-body { padding:12px 14px; }
+        /* Form elements */
+        label { font-size:.76rem; color:var(--muted); margin-bottom:2px; display:block; }
+        .form-control, select.form-control {
+            background:var(--input-bg) !important; color:var(--input-text) !important;
+            border-color:var(--input-border) !important; font-size:.84rem; }
+        .form-control:focus { box-shadow:0 0 0 .15rem rgba(200,100,0,.2) !important; }
+        .form-check-label { font-size:.83rem; color:var(--text); }
+        .form-check-input:checked { background-color:var(--accent); border-color:var(--accent); }
+        /* Sub-label */
+        .sub-label { font-size:.72rem; color:var(--muted); font-weight:600;
+            text-transform:uppercase; letter-spacing:.06em; margin-bottom:5px; margin-top:4px; }
+        /* Calibration */
+        .cal-header { display:grid; grid-template-columns:28px 1fr 1fr; gap:6px;
+            margin-bottom:4px; font-size:.71rem; color:var(--muted); text-align:center; }
+        .cal-row { display:grid; grid-template-columns:28px 1fr 1fr; gap:6px;
+            margin-bottom:5px; align-items:center; }
+        .cal-row .pt { text-align:center; font-size:.78rem; color:var(--accent); font-weight:700; }
+        /* Save */
+        .btn-save { width:100%; padding:11px; background:var(--save-bg); color:var(--save-text);
+            border:none; border-radius:6px; font-weight:700; font-size:.92rem; cursor:pointer; letter-spacing:.04em; }
+        .btn-save:hover { filter:brightness(1.1); }
+    </style>
 </head>
 <body>
-<div class="border border-primary m-5 bg-white rounded" style="width:500px;" >
-    <div class="row m-1" >
-        <div class="col-6 text-center">
-            <div id="Rssi"></div> 
-        </div>
-    </div>    
-    <div class="row m-1" >
-        <div class="col-6 text-center">
-            <div id="ADCValue"></div> 
-        </div>
-    </div>
-    <hr>
-    <div class="row m-1">
-        <div class="col text-center"><strong>Network Settings</strong></div>
-    </div>
-    <div class="row m-1">
-        <div class="col-12 text-center">
-            Hostname:<input type="text" size=20 id="hostname"/>
-        </div>
-    </div>
-    <hr>
-    <div class="row m-1">
-        <div class="col text-center"><strong>General Settings</strong></div>
-    </div>
-    <div class="row m-1" >
-        <div class="col-6 text-center">
-            Motor Type:
-            <select id="motor_type">
-                <option value="0">AC</option>
-                <option value="1">DC</option>
-            </select>
-        </div>
-        <div class="col-6 text-center">
-            Analog Pin:<input type="text" size=4 id="analogPin"/>
-        </div>
-    </div>
-    <div class="row m-1" >
-        <div class="col-6 text-center">
-            ADC Interval (us):<input type="text" size=8 id="adcReadInterval"/>
-        </div>
-        <div class="col-6 text-center">
-            Filter (0.0-1.0):<input type="text" size=4 id="alphaFilter"/>
-        </div>
-    </div>
-    <hr>
-    <div class="row m-1">
-        <div class="col text-center"><strong>Calibration Table</strong></div>
-    </div>
-    <div class="row m-1" >
-        <div class="col-6 text-center">
-            Az 0:<input type="text" size=6 id="Az0" value=""/>
-        </div>
-        <div class="col-6 text-center">
-            ADC Val0:<input type="text" size=6 id="ADCValue0"/>
-        </div>
-    </div>
-    <div class="row m-1" >
-        <div class="col-6 text-center">
-            Az 1:<input type="text" size=6 id="Az1" value=""/>
-        </div>
-        <div class="col-6 text-center">
-            ADC Val1:<input type="text" size=6 id="ADCValue1"/>
-        </div>
-    </div>
-    <div class="row m-1" >
-        <div class="col-6 text-center">
-            Az 2:<input type="text" size=6 id="Az2" value=""/>
-        </div>
-        <div class="col-6 text-center">
-            ADC Val2:<input type="text" size=6 id="ADCValue2"/>
-        </div>
-    </div>
-    <div class="row m-1" >
-        <div class="col-6 text-center">
-            Az 3:<input type="text" size=6 id="Az3" value="" />
-        </div>
-        <div class="col-6 text-center">
-            ADC Val3:<input type="text" size=6 id="ADCValue3"/>
-        </div>
-    </div>
-    <div class="row m-1" >
-        <div class="col-6 text-center">
-            Az 4:<input type="text" size=6 id="Az4" value="" />
-        </div>
-        <div class="col-6 text-center">
-            ADC Val4:<input type="text" size=6 id="ADCValue4"/>
-        </div>
-    </div>
-    <div class="row m-1" >
-        <div class="col-6 text-center">
-            Az 5:<input type="text" size=6 id="Az5" value="" />
-        </div>
-        <div class="col-6 text-center">
-            ADC Val5:<input type="text" size=6 id="ADCValue5"/>
-        </div>
-    </div>
-    <div class="row m-1">
-        <div class="col m-4 text-center">
-            <button type="button" class="btn btn-primary" id="Save" >Save</button>
-        </div>
+
+<div class="r-header">
+    <h5>&#9881; Rotor Setup &mdash; PU3IKE</h5>
+    <div style="display:flex;gap:7px;align-items:center;">
+        <a href="/">&#8962; Controle</a>
+        <a href="/update.html">&#8593; OTA</a>
+        <button class="theme-btn" onclick="toggleTheme()">&#9728; / &#9790;</button>
     </div>
 </div>
+
+<div class="r-status">
+    <span id="Rssi">RSSI: --</span>
+    <span id="ADCValue">ADC: --</span>
+</div>
+
+<div style="padding:10px;max-width:540px;margin:0 auto;">
+
+    <!-- Network -->
+    <div class="r-card">
+        <div class="r-card-header">&#127760; Rede</div>
+        <div class="r-card-body">
+            <label for="hostname">Hostname (acesse via <em>hostname</em>.local)</label>
+            <input type="text" class="form-control form-control-sm" id="hostname">
+        </div>
+    </div>
+
+    <!-- Motor -->
+    <div class="r-card">
+        <div class="r-card-header">&#9881; Motor</div>
+        <div class="r-card-body">
+            <div class="row mb-3">
+                <div class="col-5">
+                    <label>Tipo de Motor</label>
+                    <select class="form-control form-control-sm" id="motor_type">
+                        <option value="0">AC</option>
+                        <option value="1">DC</option>
+                    </select>
+                </div>
+            </div>
+            <div class="sub-label">Pinos &mdash; Motor AC</div>
+            <div class="row mb-3">
+                <div class="col-4">
+                    <label>CW (Hor&aacute;rio)</label>
+                    <input type="text" class="form-control form-control-sm" id="motor_ac_cw">
+                </div>
+                <div class="col-4">
+                    <label>CCW (Anti-H.)</label>
+                    <input type="text" class="form-control form-control-sm" id="motor_ac_ccw">
+                </div>
+                <div class="col-4">
+                    <label>Velocidade PWM</label>
+                    <input type="text" class="form-control form-control-sm" id="motor_ac_speed">
+                </div>
+            </div>
+            <div class="sub-label">Pinos &mdash; Motor DC</div>
+            <div class="row">
+                <div class="col-6">
+                    <label>Dire&ccedil;&atilde;o (IB)</label>
+                    <input type="text" class="form-control form-control-sm" id="motor_dc_ib">
+                </div>
+                <div class="col-6">
+                    <label>Velocidade PWM (EB)</label>
+                    <input type="text" class="form-control form-control-sm" id="motor_dc_eb">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sensor -->
+    <div class="r-card">
+        <div class="r-card-header">&#128268; Sensor ADC</div>
+        <div class="r-card-body">
+            <div class="row">
+                <div class="col-4">
+                    <label>Pino Anal&oacute;gico</label>
+                    <input type="text" class="form-control form-control-sm" id="analogPin">
+                </div>
+                <div class="col-4">
+                    <label>Intervalo (&micro;s)</label>
+                    <input type="text" class="form-control form-control-sm" id="adcReadInterval">
+                </div>
+                <div class="col-4">
+                    <label>Filtro EMA (0&ndash;1)</label>
+                    <input type="text" class="form-control form-control-sm" id="alphaFilter">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Calibration -->
+    <div class="r-card">
+        <div class="r-card-header">&#127919; Tabela de Calibra&ccedil;&atilde;o</div>
+        <div class="r-card-body">
+            <div class="cal-header"><div>#</div><div>Az (graus)</div><div>ADC</div></div>
+            <div id="cal-rows"></div>
+        </div>
+    </div>
+
+    <!-- Display -->
+    <div class="r-card">
+        <div class="r-card-header">&#128444; Display</div>
+        <div class="r-card-body">
+            <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" id="showRealValues">
+                <label class="form-check-label" for="showRealValues">
+                    Mostrar &acirc;ngulos reais (sem negativos)<br>
+                    <small style="color:var(--muted);">Valores negativos exibidos como 360&deg; + valor &nbsp;|&nbsp; Ex: &minus;90&deg; &rarr; 270&deg; &nbsp; &minus;150&deg; &rarr; 210&deg;</small>
+                </label>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="shortestPath">
+                <label class="form-check-label" for="shortestPath">
+                    Usar caminho mais curto no comando GO<br>
+                    <small style="color:var(--muted);">O rotor escolhe automaticamente CW ou CCW pelo menor &acirc;ngulo dentro dos limites mec&acirc;nicos</small>
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <button class="btn-save" id="Save">&#10003; Salvar Configura&ccedil;&otilde;es</button>
+    <div id="save_status" class="mt-2 text-center" style="font-size:.82rem;"></div>
+    <div style="height:20px;"></div>
+
+</div>
+
 <script>
+    // ── Theme ─────────────────────────────────────────────────
+    function applyTheme(t) {
+        document.body.classList.toggle('dark', t === 'dark');
+        localStorage.setItem('theme', t);
+    }
+    function toggleTheme() {
+        applyTheme(document.body.classList.contains('dark') ? 'light' : 'dark');
+    }
+    applyTheme(localStorage.getItem('theme') || 'light');
+
+    // ── Build calibration rows ────────────────────────────────
+    for (var i = 0; i < 6; i++) {
+        $('#cal-rows').append(
+            '<div class="cal-row">' +
+            '<div class="pt">' + i + '</div>' +
+            '<input type="text" class="form-control form-control-sm" id="Az' + i + '">' +
+            '<input type="text" class="form-control form-control-sm" id="ADCValue' + i + '">' +
+            '</div>'
+        );
+    }
+
+    // ── Display preference ────────────────────────────────────
+    $('#showRealValues').prop('checked', localStorage.getItem('showRealValues') === 'true');
+
+    // ── WebSocket ─────────────────────────────────────────────
     var compassSocket;
     function connect() {
-        
         compassSocket = new WebSocket("ws://" + location.host + "/compass");
-        
-        compassSocket.onmessage = function(event){
-            var msg = JSON.parse(event.data);
-            //if( Math.abs(compass_gauge.value - msg) >= 3 ) compass_gauge.value = msg;
-            console.log(msg);
-
-            // Type 0 = Status
-            if(msg["type"] == 0){
-                // Check for each key before updating the HTML
-                if (msg.hasOwnProperty("adc_value")) {
-                    $("#ADCValue").html("ADC Value:" + msg["adc_value"]);
-                }
-                if (msg.hasOwnProperty("rssi")) {
-                    $("#Rssi").html("Wifi Rssi: " + msg["rssi"]);
-                }
-            }else if(msg["type"] == 1){
-                for (let i = 0; i < 6; i++) {
+        compassSocket.onmessage = function(e) {
+            var msg = JSON.parse(e.data);
+            if (msg.type == 0) {
+                if (msg.adc_value !== undefined) $("#ADCValue").text("ADC: " + msg.adc_value);
+                if (msg.rssi      !== undefined) $("#Rssi").text("RSSI: " + msg.rssi + " dBm");
+            } else if (msg.type == 1) {
+                for (var i = 0; i < 6; i++) {
                     $("#Az" + i).val(msg["Az" + i]);
                     $("#ADCValue" + i).val(msg["ADCValue" + i]);
                 }
-                // Populate new fields
-                $("#motor_type").val(msg["motor_type"]);
-                $("#analogPin").val(msg["analogPin"]);
-                $("#adcReadInterval").val(msg["adcReadInterval"]);
-                $("#alphaFilter").val(msg["alphaFilter"]);
-                $("#hostname").val(msg["hostname"]);
+                $("#motor_type").val(msg.motor_type);
+                $("#analogPin").val(msg.analogPin);
+                $("#adcReadInterval").val(msg.adcReadInterval);
+                $("#alphaFilter").val(msg.alphaFilter);
+                $("#hostname").val(msg.hostname);
+                $("#motor_ac_cw").val(msg.motor_ac_cw);
+                $("#motor_ac_ccw").val(msg.motor_ac_ccw);
+                $("#motor_ac_speed").val(msg.motor_ac_speed);
+                $("#motor_dc_ib").val(msg.motor_dc_ib);
+                $("#motor_dc_eb").val(msg.motor_dc_eb);
+                $("#shortestPath").prop('checked', msg.shortestPath);
             }
         };
-
-         // Type 0 = Commands
-         // Type 1 = Get config
-         // Type 2 = Set Config
-
-        // When the socket is opened, request the current configuration
-        compassSocket.onopen = function(e) {
-            
-            start_Json = { 'type':'1' } 
-            compassSocket.send(JSON.stringify(start_Json));
-
-        };
-
-        compassSocket.onclose = function(e) {
-            console.log('Socket is closed. Reconnect will be attempted in 1 second.', e.reason);
-                setTimeout(function() {
-                connect();
-                }, 1000);
-        };
+        compassSocket.onopen  = function() { compassSocket.send(JSON.stringify({type:'1'})); };
+        compassSocket.onclose = function() { setTimeout(connect, 1000); };
     }
-    
     connect();
-    
-    
-    $(document).ready(function() {
-        $('#Save').on('click',function (e) {
 
-            var conf_Json = { 
-                'type':'2' // Set type as AD X Angle config
-            };
+    // ── Save ──────────────────────────────────────────────────
+    $('#Save').on('click', function() {
+        var conf = {type:'2'};
+        for (var i = 0; i < 6; i++) {
+            conf['Az' + i]       = $("#Az" + i).val();
+            conf['ADCValue' + i] = $("#ADCValue" + i).val();
+        }
+        conf.motor_type      = $("#motor_type").val();
+        conf.analogPin       = $("#analogPin").val();
+        conf.adcReadInterval = $("#adcReadInterval").val();
+        conf.alphaFilter     = $("#alphaFilter").val();
+        conf.hostname        = $("#hostname").val();
+        conf.motor_ac_cw     = $("#motor_ac_cw").val();
+        conf.motor_ac_ccw    = $("#motor_ac_ccw").val();
+        conf.motor_ac_speed  = $("#motor_ac_speed").val();
+        conf.motor_dc_ib     = $("#motor_dc_ib").val();
+        conf.motor_dc_eb     = $("#motor_dc_eb").val();
+        conf.shortestPath    = $("#shortestPath").is(':checked');
 
-            for (let i = 0; i < 6; i++) {
-                conf_Json['Az' + i] = $("#Az" + i).val();
-                conf_Json['ADCValue' + i] = $("#ADCValue" + i).val();
-            }
+        localStorage.setItem('showRealValues', $('#showRealValues').is(':checked'));
 
-            // Add new config values to JSON
-            conf_Json['motor_type'] = $("#motor_type").val();
-            conf_Json['analogPin'] = $("#analogPin").val();
-            conf_Json['adcReadInterval'] = $("#adcReadInterval").val();
-            conf_Json['alphaFilter'] = $("#alphaFilter").val();
-            conf_Json['hostname'] = $("#hostname").val();
-
-            if (compassSocket.readyState === WebSocket.OPEN) {
-                compassSocket.send(JSON.stringify(conf_Json));
-                alert("Configuration saved!");
-            }
-            
-        });
-    
+        if (compassSocket.readyState === WebSocket.OPEN) {
+            compassSocket.send(JSON.stringify(conf));
+            $('#save_status').html('<span style="color:var(--accent)">&#10003; Configurações salvas!</span>');
+            setTimeout(function(){ $('#save_status').html(''); }, 3000);
+        }
     });
-    </script>
-
+</script>
 </body>
 </html>

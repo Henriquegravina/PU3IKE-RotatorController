@@ -8,9 +8,9 @@
   - Grid Locator auto point
 
   
-  ![Config](docs/interface_main.png)
+  ![Config](docs/interface_main_new.png)
 
-  ![Interface](docs/interface_config.png)
+  ![Interface](docs/interface_config_new.png)
 
   
 
